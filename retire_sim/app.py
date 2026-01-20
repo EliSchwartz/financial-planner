@@ -4,10 +4,15 @@ Streamlit UI for Financial Life Planner (couple version).
 Run with: streamlit run retire_sim/app.py
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports to work on Streamlit Cloud
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import streamlit as st
 import pandas as pd
 import json
-from pathlib import Path
 
 from retire_sim.model import Params, simulate
 from retire_sim.search import find_earliest_retirement, find_earliest_joint_retirement, compare_scenarios, find_max_monthly_expense
