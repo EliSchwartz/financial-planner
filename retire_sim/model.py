@@ -78,6 +78,12 @@ class Params:
     # Minimum assets constraint
     min_assets: float = 150000.0  # Minimum assets to maintain (emergency fund)
 
+    # Liquid withdrawal tax rate
+    # Applied when drawing from liquid assets to cover expenses (when expenses > all income sources)
+    # This represents capital gains tax or other taxes on liquidating investments
+    # Default 0% assumes liquid assets are post-tax savings or tax rate is negligible
+    liquid_withdrawal_tax_rate: float = 0.0  # 0% = no tax on withdrawals
+
     # Pension rule: Mekadem (divisor for monthly income calculation)
     # Monthly income = pension_balance_at_start / mekadem
     mekadem: float = 230.0  # Person 1 mekadem
@@ -523,8 +529,25 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
         # Get monthly spending at current age (may change based on expense schedule)
         current_monthly_expense = get_expense_at_age(age1, params.spend_month, params.expense_schedule)
 
-        # Deduct monthly spending from liquid
-        liquid -= current_monthly_expense
+        # Calculate total income to liquid (before deducting expenses)
+        total_income_to_liquid = (net_income_this_month + total_pension_income_net +
+                                  total_old_age_pension + hishtalmut1 + hishtalmut2 +
+                                  one_time_event_amount)
+
+        # Calculate if we're withdrawing from liquid assets
+        # Withdrawal occurs when expenses exceed all income sources
+        shortfall = current_monthly_expense - total_income_to_liquid
+        liquid_withdrawal_tax = 0.0
+
+        if shortfall > 0 and params.liquid_withdrawal_tax_rate > 0:
+            # We need to withdraw from liquid assets to cover the shortfall
+            # Apply withdrawal tax (e.g., capital gains tax on liquidating investments)
+            liquid_withdrawal_tax = shortfall * params.liquid_withdrawal_tax_rate
+            # Total deduction from liquid = expense shortfall + tax on withdrawal
+            liquid -= (current_monthly_expense + liquid_withdrawal_tax)
+        else:
+            # No withdrawal needed or no tax - just deduct expenses
+            liquid -= current_monthly_expense
 
         # Track if liquid went below minimum assets threshold (but continue simulation)
         if not min_assets_violated and liquid < params.min_assets:
@@ -542,11 +565,8 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             phase = 'post_pension'
 
         # Calculate net change to liquid from cash flows (excluding investment returns)
-        # Includes: all income sources + hishtalmut + one-time events - spending
-        total_income_to_liquid = (net_income_this_month + total_pension_income_net +
-                                  total_old_age_pension + hishtalmut1 + hishtalmut2 +
-                                  one_time_event_amount)
-        liquid_change = total_income_to_liquid - current_monthly_expense
+        # Includes: all income - spending - withdrawal tax
+        liquid_change = total_income_to_liquid - current_monthly_expense - liquid_withdrawal_tax
 
         records.append({
             'month': month,
@@ -576,6 +596,7 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             'old_age_pension': total_old_age_pension,
             # Spending and net cash flow
             'monthly_expense': current_monthly_expense,
+            'liquid_withdrawal_tax': liquid_withdrawal_tax,
             'liquid_change': liquid_change,
             # Status flags
             'person1_working': person1_working,

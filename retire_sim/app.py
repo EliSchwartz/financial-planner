@@ -43,7 +43,7 @@ def save_persisted_session():
     try:
         # Only save the keys we care about
         keys_to_save = [
-            'end_age', 'returns', 'spend', 'liquid', 'min_assets',
+            'end_age', 'returns', 'spend', 'liquid', 'min_assets', 'liquid_withdrawal_tax',
             'p1_age_now', 'p1_income', 'p1_retire', 'p1_pension', 'p1_pension_now', 'p1_mekadem',
             'p2_age_now', 'p2_income', 'p2_retire', 'p2_pension', 'p2_pension_now', 'p2_mekadem',
             'p1_income_schedule', 'p2_income_schedule', 'one_time_events', 'expense_schedule'
@@ -120,6 +120,7 @@ def export_config_to_dict() -> dict:
         'r_annual_real': st.session_state.get('returns'),
         'liquid_now': st.session_state.get('liquid'),
         'min_assets': st.session_state.get('min_assets'),
+        'liquid_withdrawal_tax_rate': st.session_state.get('liquid_withdrawal_tax'),
         'spend_month': st.session_state.get('spend'),
 
         # Person 1
@@ -155,6 +156,7 @@ def import_config_from_dict(config: dict):
         'r_annual_real': 'returns',
         'liquid_now': 'liquid',
         'min_assets': 'min_assets',
+        'liquid_withdrawal_tax_rate': 'liquid_withdrawal_tax',
         'spend_month': 'spend',
         'p1_age_now': 'p1_age_now',
         'p1_gross_income_month': 'p1_income',
@@ -376,6 +378,7 @@ def main():
         r_annual_real = st.slider("Real Annual Return (%)", min_value=0.0, max_value=15.0, value=st.session_state.get('returns', defaults.r_annual_real * 100), step=0.5, key='returns', help="Expected annual investment return after inflation (real return)") / 100
         liquid_now = st.number_input("Assets (exc. pension) (₪K)", min_value=0.0, value=st.session_state.get('liquid', defaults.liquid_now / 1000), step=10.0, format="%.1f", key='liquid', help="Current liquid assets (savings, stocks, bonds) excluding pension accounts") * 1000
         min_assets = st.number_input("Minimum Assets (₪K)", min_value=0.0, value=st.session_state.get('min_assets', defaults.min_assets / 1000), step=100.0, format="%.0f", key='min_assets', help="Assets cannot fall below this level") * 1000
+        liquid_withdrawal_tax_rate = st.slider("Liquid Withdrawal Tax (%)", min_value=0.0, max_value=50.0, value=st.session_state.get('liquid_withdrawal_tax', defaults.liquid_withdrawal_tax_rate * 100), step=0.5, key='liquid_withdrawal_tax', help="Tax rate applied when withdrawing from liquid assets to cover expenses (e.g., capital gains tax). Not applied to income sources.") / 100
 
         st.divider()
 
@@ -499,6 +502,7 @@ def main():
             spend_month=spend_month,
             liquid_now=liquid_now,
             min_assets=min_assets,
+            liquid_withdrawal_tax_rate=liquid_withdrawal_tax_rate,
             pension_now=pension_now,
             spouse_pension_now=spouse_pension_now,
             mekadem=mekadem,

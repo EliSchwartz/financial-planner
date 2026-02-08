@@ -248,6 +248,7 @@ def find_max_monthly_expense(
             spend_month=mid,
             liquid_now=params.liquid_now,
             min_assets=params.min_assets,
+            liquid_withdrawal_tax_rate=params.liquid_withdrawal_tax_rate,
             pension_now=params.pension_now,
             spouse_pension_now=params.spouse_pension_now,
             mekadem=params.mekadem,
