@@ -181,6 +181,22 @@ def import_config_from_dict(config: dict):
             st.session_state[session_key] = config[config_key]
 
 
+def save_config_to_browser():
+    """Save configuration using Streamlit's session state snapshot."""
+    config = export_config_to_dict()
+    # Store in a special session state key that can be retrieved
+    st.session_state['saved_config'] = config
+    return config
+
+
+def load_config_from_browser():
+    """Load configuration from browser session."""
+    if 'saved_config' in st.session_state:
+        import_config_from_dict(st.session_state['saved_config'])
+        return True
+    return False
+
+
 def render_expense_schedule_ui(current_age: float, end_age: float, base_expense: float) -> list:
     """Render expense schedule UI and return the schedule list.
 
@@ -345,32 +361,48 @@ def main():
                 st.rerun()
 
         with col_save:
-            config_dict = export_config_to_dict()
-            config_json = json.dumps(config_dict, indent=2)
-            st.download_button(
-                label="💾 Save",
-                data=config_json,
-                file_name="financial_plan_config.json",
-                mime="application/json",
-                help="Download current configuration as JSON file"
-            )
+            if st.button("💾 Save", help="Save current configuration to browser session"):
+                save_config_to_browser()
+                st.success("✅ Configuration saved!")
 
         with col_load:
-            uploaded_file = st.file_uploader(
-                "📂 Load",
-                type=['json'],
-                help="Upload a previously saved configuration file",
-                label_visibility="collapsed",
-                key="config_upload"
-            )
-            if uploaded_file is not None:
-                try:
-                    config_data = json.load(uploaded_file)
-                    import_config_from_dict(config_data)
+            if st.button("📂 Load", help="Load previously saved configuration from browser session"):
+                if load_config_from_browser():
                     st.success("✅ Configuration loaded!")
                     st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error loading file: {str(e)}")
+                else:
+                    st.warning("⚠️ No saved configuration found")
+
+        # Export/Import with JSON files (collapsible)
+        with st.expander("📁 Export/Import JSON"):
+            col_export, col_import = st.columns(2)
+
+            with col_export:
+                config_dict = export_config_to_dict()
+                config_json = json.dumps(config_dict, indent=2)
+                st.download_button(
+                    label="⬇️ Export JSON",
+                    data=config_json,
+                    file_name="financial_plan_config.json",
+                    mime="application/json",
+                    help="Download configuration as JSON file for backup or sharing"
+                )
+
+            with col_import:
+                uploaded_file = st.file_uploader(
+                    "⬆️ Import JSON",
+                    type=['json'],
+                    help="Upload a JSON configuration file",
+                    key="config_upload"
+                )
+                if uploaded_file is not None:
+                    try:
+                        config_data = json.load(uploaded_file)
+                        import_config_from_dict(config_data)
+                        st.success("✅ JSON imported!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
         st.divider()
 
