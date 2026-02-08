@@ -112,6 +112,73 @@ def render_income_schedule_ui(person_id: str, current_age: float, gross_income: 
     return schedule
 
 
+def export_config_to_dict() -> dict:
+    """Export current configuration to a dictionary."""
+    config = {
+        # Shared parameters
+        'end_age': st.session_state.get('end_age'),
+        'r_annual_real': st.session_state.get('returns'),
+        'liquid_now': st.session_state.get('liquid'),
+        'min_assets': st.session_state.get('min_assets'),
+        'spend_month': st.session_state.get('spend'),
+
+        # Person 1
+        'p1_age_now': st.session_state.get('p1_age_now'),
+        'p1_gross_income_month': st.session_state.get('p1_income'),
+        'p1_retire_age': st.session_state.get('p1_retire'),
+        'p1_pension_start_age': st.session_state.get('p1_pension'),
+        'p1_pension_now': st.session_state.get('p1_pension_now'),
+        'p1_mekadem': st.session_state.get('p1_mekadem'),
+        'p1_income_schedule': st.session_state.get('p1_income_schedule'),
+
+        # Person 2
+        'p2_age_now': st.session_state.get('p2_age_now'),
+        'p2_gross_income_month': st.session_state.get('p2_income'),
+        'p2_retire_age': st.session_state.get('p2_retire'),
+        'p2_pension_start_age': st.session_state.get('p2_pension'),
+        'p2_pension_now': st.session_state.get('p2_pension_now'),
+        'p2_mekadem': st.session_state.get('p2_mekadem'),
+        'p2_income_schedule': st.session_state.get('p2_income_schedule'),
+
+        # Schedules and events
+        'expense_schedule': st.session_state.get('expense_schedule'),
+        'one_time_events': st.session_state.get('one_time_events'),
+    }
+    return config
+
+
+def import_config_from_dict(config: dict):
+    """Import configuration from a dictionary into session state."""
+    # Map config keys to session state keys
+    key_mapping = {
+        'end_age': 'end_age',
+        'r_annual_real': 'returns',
+        'liquid_now': 'liquid',
+        'min_assets': 'min_assets',
+        'spend_month': 'spend',
+        'p1_age_now': 'p1_age_now',
+        'p1_gross_income_month': 'p1_income',
+        'p1_retire_age': 'p1_retire',
+        'p1_pension_start_age': 'p1_pension',
+        'p1_pension_now': 'p1_pension_now',
+        'p1_mekadem': 'p1_mekadem',
+        'p1_income_schedule': 'p1_income_schedule',
+        'p2_age_now': 'p2_age_now',
+        'p2_gross_income_month': 'p2_income',
+        'p2_retire_age': 'p2_retire',
+        'p2_pension_start_age': 'p2_pension',
+        'p2_pension_now': 'p2_pension_now',
+        'p2_mekadem': 'p2_mekadem',
+        'p2_income_schedule': 'p2_income_schedule',
+        'expense_schedule': 'expense_schedule',
+        'one_time_events': 'one_time_events',
+    }
+
+    for config_key, session_key in key_mapping.items():
+        if config_key in config and config[config_key] is not None:
+            st.session_state[session_key] = config[config_key]
+
+
 def render_expense_schedule_ui(current_age: float, end_age: float, base_expense: float) -> list:
     """Render expense schedule UI and return the schedule list.
 
@@ -262,15 +329,46 @@ def main():
         # Shared parameters at the top
         st.subheader("Shared Parameters")
 
-        # Add reset button
-        if st.button("🔄 Reset to Defaults", help="Clear saved values and reset to default parameters"):
-            # Delete persisted file
-            if PERSIST_FILE.exists():
-                PERSIST_FILE.unlink()
-            # Clear session state
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+        # Configuration management buttons
+        col_reset, col_save, col_load = st.columns(3)
+
+        with col_reset:
+            if st.button("🔄 Reset", help="Clear saved values and reset to default parameters"):
+                # Delete persisted file
+                if PERSIST_FILE.exists():
+                    PERSIST_FILE.unlink()
+                # Clear session state
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+
+        with col_save:
+            config_dict = export_config_to_dict()
+            config_json = json.dumps(config_dict, indent=2)
+            st.download_button(
+                label="💾 Save",
+                data=config_json,
+                file_name="financial_plan_config.json",
+                mime="application/json",
+                help="Download current configuration as JSON file"
+            )
+
+        with col_load:
+            uploaded_file = st.file_uploader(
+                "📂 Load",
+                type=['json'],
+                help="Upload a previously saved configuration file",
+                label_visibility="collapsed",
+                key="config_upload"
+            )
+            if uploaded_file is not None:
+                try:
+                    config_data = json.load(uploaded_file)
+                    import_config_from_dict(config_data)
+                    st.success("✅ Configuration loaded!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error loading file: {str(e)}")
 
         st.divider()
 
@@ -309,12 +407,12 @@ def main():
             income_schedule = render_income_schedule_ui('p1', age_now, gross_income_month)
 
             retire_age = st.number_input("Retirement Age",
-                                        min_value=age_now,
+                                        min_value=18.0,
                                         max_value=100.0,
                                         value=st.session_state.get('p1_retire', defaults.retire_age),
                                         step=1.0,
                                         key='p1_retire',
-                                        help="Age to stop working and start drawing from assets")
+                                        help="Age to stop working (can be <= current age if already retired)")
 
             pension_start_age = st.number_input("Pension Start Age", min_value=retire_age, max_value=100.0, value=st.session_state.get('p1_pension', defaults.pension_start_age), step=1.0, key='p1_pension', help="Age to start receiving pension income (usually 67 in Israel)")
 
@@ -345,12 +443,12 @@ def main():
             spouse_income_schedule = render_income_schedule_ui('p2', spouse_age_now, spouse_gross_income_month)
 
             spouse_retire_age = st.number_input("Retirement Age",
-                                               min_value=spouse_age_now,
+                                               min_value=18.0,
                                                max_value=100.0,
                                                value=st.session_state.get('p2_retire', defaults.spouse_retire_age),
                                                step=1.0,
                                                key='p2_retire',
-                                               help="Age to stop working and start drawing from assets")
+                                               help="Age to stop working (can be <= current age if already retired)")
 
             spouse_pension_start_age = st.number_input("Pension Start Age", min_value=spouse_retire_age, max_value=100.0, value=st.session_state.get('p2_pension', defaults.spouse_pension_start_age), step=1.0, key='p2_pension', help="Age to start receiving pension income (usually 67 in Israel)")
 

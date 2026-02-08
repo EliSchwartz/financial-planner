@@ -232,20 +232,8 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
         spouse_retire_age = params.spouse_retire_age
 
     # Validate inputs
-    if retire_age < params.age_now:
-        return Result(
-            ok=False,
-            reason="Person 1 retirement age cannot be before current age",
-            df=pd.DataFrame()
-        )
-
-    if spouse_retire_age < params.spouse_age_now:
-        return Result(
-            ok=False,
-            reason="Person 2 retirement age cannot be before current age",
-            df=pd.DataFrame()
-        )
-
+    # Allow retire_age <= age_now (already retired scenario)
+    # Just ensure it's not after pension start age
     if retire_age > params.pension_start_age:
         return Result(
             ok=False,
