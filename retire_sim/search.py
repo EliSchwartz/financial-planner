@@ -247,6 +247,7 @@ def find_max_monthly_expense(
             spouse_hishtalmut_salary_cap=params.spouse_hishtalmut_salary_cap,
             spend_month=mid,
             liquid_now=params.liquid_now,
+            liquid_nontaxable_pct=params.liquid_nontaxable_pct,
             min_assets=params.min_assets,
             liquid_withdrawal_tax_rate=params.liquid_withdrawal_tax_rate,
             pension_now=params.pension_now,

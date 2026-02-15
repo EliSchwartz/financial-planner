@@ -78,10 +78,18 @@ class Params:
     # Minimum assets constraint
     min_assets: float = 150000.0  # Minimum assets to maintain (emergency fund)
 
+    # Liquid assets tax status
+    # Percentage of initial liquid assets that are NOT taxable (already post-tax)
+    # Examples:
+    # - 100% = All in post-tax accounts (regular savings, Roth-like)
+    # - 0% = All in tax-deferred accounts (traditional IRA/401k-like)
+    # - 50% = Half in each type
+    liquid_nontaxable_pct: float = 1.0  # Default 100% = all post-tax
+
     # Liquid withdrawal tax rate
-    # Applied when drawing from liquid assets to cover expenses (when expenses > all income sources)
+    # Applied to taxable portion when drawing from liquid assets to cover expenses
     # This represents capital gains tax or other taxes on liquidating investments
-    # Default 0% assumes liquid assets are post-tax savings or tax rate is negligible
+    # Only applied to the taxable portion of withdrawals
     liquid_withdrawal_tax_rate: float = 0.0  # 0% = no tax on withdrawals
 
     # Pension rule: Mekadem (divisor for monthly income calculation)
@@ -341,7 +349,11 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
     total_months = round((params.end_age - older_age_now) * 12)
 
     # Initialize tracking
-    liquid = params.liquid_now
+    # Split liquid into taxable and non-taxable portions
+    liquid_nontaxable = params.liquid_now * params.liquid_nontaxable_pct
+    liquid_taxable = params.liquid_now * (1.0 - params.liquid_nontaxable_pct)
+    liquid = liquid_nontaxable + liquid_taxable  # Total liquid for tracking
+
     pension1 = params.pension_now
     pension2 = params.spouse_pension_now
     r_month = params.r_month
@@ -373,8 +385,10 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
         age1 = params.age_now + month / 12
         age2 = params.spouse_age_now + month / 12
 
-        # Apply returns to all accounts
-        liquid *= (1 + r_month)
+        # Apply returns to all accounts (including both liquid portions)
+        liquid_nontaxable *= (1 + r_month)
+        liquid_taxable *= (1 + r_month)
+        liquid = liquid_nontaxable + liquid_taxable
         pension1 *= (1 + r_month)
         pension2 *= (1 + r_month)
 
@@ -416,7 +430,8 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             # Total hishtalmut (employee 2.5% + employer 7.5% = 10%) on capped salary
             employer_hishtalmut_p1 = capped_salary_p1 * params.hishtalmut_rate_employer
             hishtalmut1 = employee_hishtalmut_p1 + employer_hishtalmut_p1
-            liquid += hishtalmut1
+            # Hishtalmut goes to nontaxable (already taxed)
+            liquid_nontaxable += hishtalmut1
 
             # Total pension (employee 6% + employer 12.5% = 18.5%)
             employer_pension_p1 = gross_p1 * params.pension_rate_employer
@@ -449,14 +464,15 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             # Total hishtalmut (employee 2.5% + employer 7.5% = 10%) on capped salary
             employer_hishtalmut_p2 = capped_salary_p2 * params.spouse_hishtalmut_rate_employer
             hishtalmut2 = employee_hishtalmut_p2 + employer_hishtalmut_p2
-            liquid += hishtalmut2
+            # Hishtalmut goes to nontaxable (already taxed)
+            liquid_nontaxable += hishtalmut2
 
             # Total pension (employee 6% + employer 12.5% = 18.5%)
             employer_pension_p2 = gross_p2 * params.spouse_pension_rate_employer
             pension2 += employee_pension_p2 + employer_pension_p2
 
-        # Add net income to liquid
-        liquid += net_income_this_month
+        # Add net income to nontaxable liquid (income already taxed)
+        liquid_nontaxable += net_income_this_month
 
         # Apply one-time events (if any) at the appropriate age
         one_time_event_amount = 0.0
@@ -464,7 +480,8 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             for idx, (event_age, amount, description) in enumerate(params.one_time_events):
                 # Apply event once when Person 1 reaches the specified age
                 if age1 >= event_age and idx not in applied_events:
-                    liquid += amount
+                    # One-time events go to nontaxable (assume already post-tax)
+                    liquid_nontaxable += amount
                     one_time_event_amount += amount
                     applied_events.add(idx)
 
@@ -517,11 +534,11 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
             total_pension_income_net += pension_net_p2
             pension2 -= pension_gross_p2
 
-        # Add pension income to liquid (it's net income, after tax)
-        liquid += total_pension_income_net
+        # Add pension income to nontaxable liquid (it's net income, already taxed)
+        liquid_nontaxable += total_pension_income_net
 
-        # Add old age pension to liquid (it's net income, typically tax-free)
-        liquid += total_old_age_pension
+        # Add old age pension to nontaxable liquid (it's net income, typically tax-free)
+        liquid_nontaxable += total_old_age_pension
 
         # Calculate total income from all sources (salary + pension + old age pension)
         total_income_this_month = net_income_this_month + total_pension_income_net + total_old_age_pension
@@ -539,15 +556,37 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
         shortfall = current_monthly_expense - total_income_to_liquid
         liquid_withdrawal_tax = 0.0
 
-        if shortfall > 0 and params.liquid_withdrawal_tax_rate > 0:
+        if shortfall > 0:
             # We need to withdraw from liquid assets to cover the shortfall
-            # Apply withdrawal tax (e.g., capital gains tax on liquidating investments)
-            liquid_withdrawal_tax = shortfall * params.liquid_withdrawal_tax_rate
-            # Total deduction from liquid = expense shortfall + tax on withdrawal
-            liquid -= (current_monthly_expense + liquid_withdrawal_tax)
+            # Calculate total liquid and taxable percentage
+            total_liquid_now = liquid_nontaxable + liquid_taxable
+
+            if total_liquid_now > 0:
+                taxable_pct = liquid_taxable / total_liquid_now
+            else:
+                taxable_pct = 0.0
+
+            # Calculate tax only on the taxable portion of withdrawal
+            taxable_portion_of_withdrawal = shortfall * taxable_pct
+            liquid_withdrawal_tax = taxable_portion_of_withdrawal * params.liquid_withdrawal_tax_rate
+
+            # Total amount to withdraw (shortfall + tax on taxable portion)
+            total_withdrawal = shortfall + liquid_withdrawal_tax
+
+            # Withdraw proportionally from both buckets
+            if total_liquid_now > 0:
+                nontaxable_withdrawal = total_withdrawal * (liquid_nontaxable / total_liquid_now)
+                taxable_withdrawal = total_withdrawal * (liquid_taxable / total_liquid_now)
+
+                liquid_nontaxable -= nontaxable_withdrawal
+                liquid_taxable -= taxable_withdrawal
         else:
-            # No withdrawal needed or no tax - just deduct expenses
-            liquid -= current_monthly_expense
+            # No withdrawal needed - expenses covered by income
+            # No change to liquid balances
+            pass
+
+        # Recalculate total liquid
+        liquid = liquid_nontaxable + liquid_taxable
 
         # Track if liquid went below minimum assets threshold (but continue simulation)
         if not min_assets_violated and liquid < params.min_assets:
