@@ -409,7 +409,7 @@ def main():
         st.divider()
 
         end_age = st.number_input("End Age (Planning Horizon)", min_value=50.0, max_value=120.0, value=st.session_state.get('end_age', defaults.end_age), step=1.0, key='end_age', help="Age to plan until (simulation stops here)")
-        r_annual_real = st.slider("Real Annual Return (%)", min_value=0.0, max_value=15.0, value=st.session_state.get('returns', defaults.r_annual_real * 100), step=0.5, key='returns', help="Expected annual investment return after inflation (real return)") / 100
+        r_annual_real = st.slider("Real Annual Return (%)", min_value=0.0, max_value=10.0, value=st.session_state.get('returns', defaults.r_annual_real * 100), step=0.25, key='returns', help="Expected annual investment return after inflation (real return)") / 100
         liquid_now = st.number_input("Assets (exc. pension) (₪K)", min_value=0.0, value=st.session_state.get('liquid', defaults.liquid_now / 1000), step=10.0, format="%.1f", key='liquid', help="Current liquid assets (savings, stocks, bonds) excluding pension accounts") * 1000
         liquid_nontaxable_pct = st.slider("Assets Already Post-Tax (%)", min_value=0.0, max_value=100.0, value=st.session_state.get('liquid_nontaxable_pct', defaults.liquid_nontaxable_pct * 100), step=5.0, key='liquid_nontaxable_pct', help="Percentage of liquid assets that are already post-tax (e.g., regular savings, Roth accounts). Income is added to this portion. Only the remaining taxable portion incurs withdrawal tax.") / 100
         min_assets = st.number_input("Minimum Assets (₪K)", min_value=0.0, value=st.session_state.get('min_assets', defaults.min_assets / 1000), step=100.0, format="%.0f", key='min_assets', help="Assets cannot fall below this level") * 1000
