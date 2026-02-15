@@ -551,39 +551,38 @@ def simulate(retire_age: float, params: Params, spouse_retire_age: Optional[floa
                                   total_old_age_pension + hishtalmut1 + hishtalmut2 +
                                   one_time_event_amount)
 
-        # Calculate if we're withdrawing from liquid assets
-        # Withdrawal occurs when expenses exceed all income sources
+        # Calculate if we're withdrawing from liquid assets beyond current income
+        # Shortfall occurs when expenses exceed all income sources
         shortfall = current_monthly_expense - total_income_to_liquid
         liquid_withdrawal_tax = 0.0
 
-        if shortfall > 0:
-            # We need to withdraw from liquid assets to cover the shortfall
-            # Calculate total liquid and taxable percentage
-            total_liquid_now = liquid_nontaxable + liquid_taxable
+        # Always deduct expenses from liquid
+        # First, deduct from nontaxable (where income was added)
+        liquid_nontaxable -= current_monthly_expense
 
-            if total_liquid_now > 0:
-                taxable_pct = liquid_taxable / total_liquid_now
+        # If expenses exceeded income (shortfall > 0), we withdrew from existing assets
+        # Apply withdrawal tax on the taxable portion of the excess withdrawal
+        if shortfall > 0:
+            # Calculate total liquid and taxable percentage BEFORE the expense deduction
+            total_liquid_before = liquid_nontaxable + current_monthly_expense + liquid_taxable
+
+            if total_liquid_before > 0:
+                taxable_pct = liquid_taxable / total_liquid_before
             else:
                 taxable_pct = 0.0
 
-            # Calculate tax only on the taxable portion of withdrawal
-            taxable_portion_of_withdrawal = shortfall * taxable_pct
-            liquid_withdrawal_tax = taxable_portion_of_withdrawal * params.liquid_withdrawal_tax_rate
+            # Calculate tax only on the taxable portion of the shortfall
+            taxable_portion_of_shortfall = shortfall * taxable_pct
+            liquid_withdrawal_tax = taxable_portion_of_shortfall * params.liquid_withdrawal_tax_rate
 
-            # Total amount to withdraw (shortfall + tax on taxable portion)
-            total_withdrawal = shortfall + liquid_withdrawal_tax
-
-            # Withdraw proportionally from both buckets
+            # Deduct the withdrawal tax proportionally from both buckets
+            total_liquid_now = liquid_nontaxable + liquid_taxable
             if total_liquid_now > 0:
-                nontaxable_withdrawal = total_withdrawal * (liquid_nontaxable / total_liquid_now)
-                taxable_withdrawal = total_withdrawal * (liquid_taxable / total_liquid_now)
+                nontaxable_tax = liquid_withdrawal_tax * (liquid_nontaxable / total_liquid_now)
+                taxable_tax = liquid_withdrawal_tax * (liquid_taxable / total_liquid_now)
 
-                liquid_nontaxable -= nontaxable_withdrawal
-                liquid_taxable -= taxable_withdrawal
-        else:
-            # No withdrawal needed - expenses covered by income
-            # No change to liquid balances
-            pass
+                liquid_nontaxable -= nontaxable_tax
+                liquid_taxable -= taxable_tax
 
         # Recalculate total liquid
         liquid = liquid_nontaxable + liquid_taxable
