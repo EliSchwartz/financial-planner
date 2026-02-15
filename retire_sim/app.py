@@ -23,6 +23,74 @@ from retire_sim.israeli_tax import calculate_monthly_tax_from_gross, get_effecti
 PERSIST_FILE = Path.home() / '.financial_life_planner_session.json'
 
 
+def convert_to_annual_data(df):
+    """Convert monthly dataframe to annual data by grouping every 12 months."""
+    if df.empty:
+        return df
+
+    # Add year column (0-indexed)
+    df_copy = df.copy()
+    df_copy['year'] = df_copy['month'] // 12
+
+    # Define aggregation rules for each column type
+    # For balance columns, take the last value of the year
+    balance_cols = ['liquid', 'pension1', 'pension2']
+
+    # For age columns, take the first value of the year
+    age_cols = ['age1', 'age2']
+
+    # For flow columns, sum over the year
+    flow_cols = [
+        'salary1_gross', 'salary1_net', 'hishtalmut1',
+        'salary2_gross', 'salary2_net', 'hishtalmut2',
+        'pension1_income', 'pension2_income',
+        'pension1_income_net', 'pension2_income_net',
+        'one_time_event', 'total_pension_income',
+        'old_age_pension', 'monthly_expense',
+        'liquid_withdrawal_tax', 'liquid_change'
+    ]
+
+    # Build aggregation dictionary
+    agg_dict = {}
+
+    # Month: take the first month of the year
+    if 'month' in df_copy.columns:
+        agg_dict['month'] = 'first'
+
+    # Ages: first value
+    for col in age_cols:
+        if col in df_copy.columns:
+            agg_dict[col] = 'first'
+
+    # Phase: first value
+    if 'phase' in df_copy.columns:
+        agg_dict['phase'] = 'first'
+
+    # Balances: last value
+    for col in balance_cols:
+        if col in df_copy.columns:
+            agg_dict[col] = 'last'
+
+    # Flows: sum
+    for col in flow_cols:
+        if col in df_copy.columns:
+            agg_dict[col] = 'sum'
+
+    # Flags: any True means True for the year
+    if 'person1_working' in df_copy.columns:
+        agg_dict['person1_working'] = 'any'
+    if 'person2_working' in df_copy.columns:
+        agg_dict['person2_working'] = 'any'
+
+    # Group by year and aggregate
+    df_annual = df_copy.groupby('year', as_index=False).agg(agg_dict)
+
+    # Drop the year column as we have month
+    df_annual = df_annual.drop(columns=['year'])
+
+    return df_annual
+
+
 def load_persisted_session():
     """Load persisted session state from file."""
     if PERSIST_FILE.exists():
@@ -680,16 +748,31 @@ def main():
 
                 # Data table
                 with st.expander("View Detailed Data"):
+                    # Toggle between monthly and annual view
+                    view_mode = st.radio(
+                        "View Mode",
+                        options=["Monthly", "Annual"],
+                        horizontal=True,
+                        key="view_mode_tab1"
+                    )
+
+                    if view_mode == "Annual":
+                        df_display = convert_to_annual_data(result.df)
+                        csv_suffix = "annual"
+                    else:
+                        df_display = result.df
+                        csv_suffix = "monthly"
+
                     # Convert dataframe to CSV for download
-                    csv = result.df.to_csv(index=False)
+                    csv = df_display.to_csv(index=False)
                     st.download_button(
                         label="📥 Download as CSV",
                         data=csv,
-                        file_name=f"financial_plan_{params.retire_age:.0f}_{params.spouse_retire_age:.0f}.csv",
+                        file_name=f"financial_plan_{params.retire_age:.0f}_{params.spouse_retire_age:.0f}_{csv_suffix}.csv",
                         mime="text/csv",
                         key="download_csv_tab1"
                     )
-                    st.dataframe(result.df, width='stretch')
+                    st.dataframe(df_display, width='stretch')
 
     with tab2:
         st.header("Find Earliest Retirement Age (Person 1)")
@@ -891,16 +974,31 @@ def main():
 
                     # Data table
                     with st.expander("View Detailed Data"):
+                        # Toggle between monthly and annual view
+                        view_mode = st.radio(
+                            "View Mode",
+                            options=["Monthly", "Annual"],
+                            horizontal=True,
+                            key="view_mode_tab5"
+                        )
+
+                        if view_mode == "Annual":
+                            df_display = convert_to_annual_data(result.df)
+                            csv_suffix = "annual"
+                        else:
+                            df_display = result.df
+                            csv_suffix = "monthly"
+
                         # Convert dataframe to CSV for download
-                        csv = result.df.to_csv(index=False)
+                        csv = df_display.to_csv(index=False)
                         st.download_button(
                             label="📥 Download as CSV",
                             data=csv,
-                            file_name=f"financial_plan_max_expense_{params.retire_age:.0f}_{params.spouse_retire_age:.0f}.csv",
+                            file_name=f"financial_plan_max_expense_{params.retire_age:.0f}_{params.spouse_retire_age:.0f}_{csv_suffix}.csv",
                             mime="text/csv",
                             key="download_csv_tab5"
                         )
-                        st.dataframe(result.df, width='stretch')
+                        st.dataframe(df_display, width='stretch')
             else:
                 st.error("❌ Could not find a feasible solution. Try adjusting the Minimum Assets or retirement ages in the sidebar.")
 
