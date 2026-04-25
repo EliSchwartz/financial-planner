@@ -717,8 +717,10 @@ def main():
         st.markdown("Simulate your financial plan with the parameters specified in the sidebar.")
 
         if st.button("Run Simulation", type="primary"):
-            result = simulate(params.retire_age, params, params.spouse_retire_age)
+            st.session_state['tab1_result'] = simulate(params.retire_age, params, params.spouse_retire_age)
 
+        result = st.session_state.get('tab1_result')
+        if result is not None:
             # Display summary
             if result.ok:
                 st.success(f"✅ {result.reason}")
@@ -935,7 +937,11 @@ def main():
                     retire_age=params.retire_age,
                     spouse_retire_age=params.spouse_retire_age
                 )
+            st.session_state['tab5_result'] = (max_expense, result)
 
+        tab5_stored = st.session_state.get('tab5_result')
+        if tab5_stored is not None:
+            max_expense, result = tab5_stored
             if max_expense is not None and result is not None:
                 st.success(f"✅ Maximum monthly expense: **₪{max_expense/1000:.1f}K**")
 
