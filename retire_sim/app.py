@@ -390,13 +390,18 @@ def main():
                     key="config_upload"
                 )
                 if uploaded_file is not None:
-                    try:
-                        config_data = json.load(uploaded_file)
-                        import_config_from_dict(config_data)
+                    file_id = (uploaded_file.name, uploaded_file.size)
+                    if st.session_state.get('_last_imported_file') != file_id:
+                        try:
+                            config_data = json.load(uploaded_file)
+                            import_config_from_dict(config_data)
+                            st.session_state['_last_imported_file'] = file_id
+                            st.success("✅ JSON imported!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                    else:
                         st.success("✅ JSON imported!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
 
         st.divider()
 
