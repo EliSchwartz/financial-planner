@@ -19,22 +19,6 @@ from retire_sim.search import find_earliest_retirement, find_earliest_joint_reti
 from retire_sim.plots import plot_combined
 from retire_sim.israeli_tax import calculate_monthly_tax_from_gross, get_effective_tax_rate
 
-_PERSIST_DIR = Path.home() / '.financial_life_planner_sessions'
-_PERSIST_DIR.mkdir(exist_ok=True)
-
-
-def _persist_file() -> Path:
-    """Return a per-session persistence file path using Streamlit's session ID."""
-    try:
-        from streamlit.runtime import get_instance
-        from streamlit.runtime.scriptrunner import get_script_run_ctx
-        ctx = get_script_run_ctx()
-        session_id = ctx.session_id if ctx else "default"
-    except Exception:
-        session_id = "default"
-    return _PERSIST_DIR / f"session_{session_id}.json"
-
-
 def convert_to_annual_data(df):
     """Convert monthly dataframe to annual data by grouping every 12 months."""
     if df.empty:
@@ -101,40 +85,6 @@ def convert_to_annual_data(df):
     df_annual = df_annual.drop(columns=['year'])
 
     return df_annual
-
-
-def load_persisted_session():
-    """Load persisted session state from file."""
-    persist_file = _persist_file()
-    if persist_file.exists():
-        try:
-            with open(persist_file, 'r') as f:
-                data = json.load(f)
-                # Only load if not already in session state (to avoid overwriting current session)
-                for key, value in data.items():
-                    if key not in st.session_state:
-                        st.session_state[key] = value
-        except Exception as e:
-            # If loading fails, just continue with defaults
-            pass
-
-
-def save_persisted_session():
-    """Save current session state to file."""
-    try:
-        # Only save the keys we care about
-        keys_to_save = [
-            'end_age', 'returns', 'spend', 'liquid', 'liquid_nontaxable_pct', 'min_assets', 'liquid_withdrawal_tax',
-            'p1_age_now', 'p1_income', 'p1_retire', 'p1_pension', 'p1_pension_now', 'p1_mekadem',
-            'p2_age_now', 'p2_income', 'p2_retire', 'p2_pension', 'p2_pension_now', 'p2_mekadem',
-            'p1_income_schedule', 'p2_income_schedule', 'one_time_events', 'expense_schedule'
-        ]
-        data = {key: st.session_state.get(key) for key in keys_to_save if key in st.session_state}
-        with open(_persist_file(), 'w') as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        # If saving fails, just continue
-        pass
 
 
 def render_income_schedule_ui(person_id: str, current_age: float, gross_income: float) -> list:
@@ -262,22 +212,6 @@ def import_config_from_dict(config: dict):
     for config_key, session_key in key_mapping.items():
         if config_key in config and config[config_key] is not None:
             st.session_state[session_key] = config[config_key]
-
-
-def save_config_to_browser():
-    """Save configuration using Streamlit's session state snapshot."""
-    config = export_config_to_dict()
-    # Store in a special session state key that can be retrieved
-    st.session_state['saved_config'] = config
-    return config
-
-
-def load_config_from_browser():
-    """Load configuration from browser session."""
-    if 'saved_config' in st.session_state:
-        import_config_from_dict(st.session_state['saved_config'])
-        return True
-    return False
 
 
 def render_expense_schedule_ui(current_age: float, end_age: float, base_expense: float) -> list:
@@ -414,9 +348,6 @@ def main():
         layout="wide"
     )
 
-    # Load persisted session on startup
-    load_persisted_session()
-
     st.title("💰 Financial Life Planner")
     st.markdown("Plan your financial future for you and your spouse with different scenarios and life events.")
 
@@ -430,33 +361,13 @@ def main():
         # Shared parameters at the top
         st.subheader("Shared Parameters")
 
-        # Configuration management buttons
-        col_reset, col_save, col_load = st.columns(3)
+        # Reset button
+        if st.button("🔄 Reset", help="Clear session state and reset to default parameters"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
 
-        with col_reset:
-            if st.button("🔄 Reset", help="Clear saved values and reset to default parameters"):
-                # Delete persisted file
-                if PERSIST_FILE.exists():
-                    PERSIST_FILE.unlink()
-                # Clear session state
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
-
-        with col_save:
-            if st.button("💾 Save", help="Save current configuration to browser session"):
-                save_config_to_browser()
-                st.success("✅ Configuration saved!")
-
-        with col_load:
-            if st.button("📂 Load", help="Load previously saved configuration from browser session"):
-                if load_config_from_browser():
-                    st.success("✅ Configuration loaded!")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ No saved configuration found")
-
-        # Export/Import with JSON files (collapsible)
+        # Export/Import JSON (collapsible)
         with st.expander("📁 Export/Import JSON"):
             col_export, col_import = st.columns(2)
 
@@ -633,9 +544,6 @@ def main():
             old_age_pension_month=defaults.old_age_pension_month,
             old_age_pension_start_age=defaults.old_age_pension_start_age
         )
-
-        # Save session state to persist across refreshes
-        save_persisted_session()
 
         # Display derived values
         st.divider()
