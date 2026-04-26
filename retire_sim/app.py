@@ -19,8 +19,20 @@ from retire_sim.search import find_earliest_retirement, find_earliest_joint_reti
 from retire_sim.plots import plot_combined
 from retire_sim.israeli_tax import calculate_monthly_tax_from_gross, get_effective_tax_rate
 
-# File to persist session across refreshes
-PERSIST_FILE = Path.home() / '.financial_life_planner_session.json'
+_PERSIST_DIR = Path.home() / '.financial_life_planner_sessions'
+_PERSIST_DIR.mkdir(exist_ok=True)
+
+
+def _persist_file() -> Path:
+    """Return a per-session persistence file path using Streamlit's session ID."""
+    try:
+        from streamlit.runtime import get_instance
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        ctx = get_script_run_ctx()
+        session_id = ctx.session_id if ctx else "default"
+    except Exception:
+        session_id = "default"
+    return _PERSIST_DIR / f"session_{session_id}.json"
 
 
 def convert_to_annual_data(df):
@@ -93,9 +105,10 @@ def convert_to_annual_data(df):
 
 def load_persisted_session():
     """Load persisted session state from file."""
-    if PERSIST_FILE.exists():
+    persist_file = _persist_file()
+    if persist_file.exists():
         try:
-            with open(PERSIST_FILE, 'r') as f:
+            with open(persist_file, 'r') as f:
                 data = json.load(f)
                 # Only load if not already in session state (to avoid overwriting current session)
                 for key, value in data.items():
@@ -117,7 +130,7 @@ def save_persisted_session():
             'p1_income_schedule', 'p2_income_schedule', 'one_time_events', 'expense_schedule'
         ]
         data = {key: st.session_state.get(key) for key in keys_to_save if key in st.session_state}
-        with open(PERSIST_FILE, 'w') as f:
+        with open(_persist_file(), 'w') as f:
             json.dump(data, f, indent=2)
     except Exception as e:
         # If saving fails, just continue
